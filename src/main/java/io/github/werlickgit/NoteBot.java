@@ -62,9 +62,10 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                         .chatId(chat_id)
                         .parseMode("HTML")
                         .text("""
-                                <b>🔖 Процесс создания заметки (1/3)</b>
+                                <b>🔖 Процесс создания заметки (2/3)</b>
                                 
-                                <i>Укажите название для заметки</i>
+                                <i>Тег обязательно должен начинаться с символа </i> <code>#</code>
+                                <i>Например:</i> <code>#учёба</code>, <code>#идеи</code>, <code>#важное</code>
                                 """)
                         .build();
                 try {
@@ -82,10 +83,9 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             .chatId(chat_id)
                             .parseMode("HTML")
                             .text("""
-                                <b>🔖 Процесс создания заметки (2/3)</b>
+                                <b>🔖 Процесс создания заметки (3/3)</b>
                                 
-                                <i>Тег обязательно должен начинаться с символа </i> <code>#</code>
-                                <i>Например:</i> <code>#учёба</code>, <code>#идеи</code>, <code>#важное</code>
+                                <i>Введите текст для заметки</i>
                                 """)
                             .build();
                     try {
@@ -117,14 +117,17 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                 SendMessage sendMessage = SendMessage
                         .builder()
                         .chatId(chat_id)
+                        .parseMode("HTML")
                         .text("""
-                                Заметка успешно создана!
+                                <b>✅ Заметка успешно создана</b>
                                 
-                                %s
-                                %s
+                                <i>🏷️ Тег:</i> <code>%s</code>
+                                <i>📝 Название: %s</i>
                                 
-                                %s
-                                """.formatted(title, tag, text))
+                                <b>Содержание заметки:</b>
+                                
+                                <blockquote>%s</blockquote> 
+                                """.formatted(tag, title, text))
                         .build();
                 states.put(chat_id, DialogueStatus.NONE);
                 List<NoteDraft> userNotes = savedDrafts.computeIfAbsent(chat_id, k -> new ArrayList<>());
@@ -156,21 +159,26 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                     e.printStackTrace();
                 }
             } else if (message_text.equals("/note")) {
-                states.put(chat_id, DialogueStatus.AWAITING_TITLE);
                 drafts.put(chat_id, new NoteDraft());
-                currentStatus = DialogueStatus.AWAITING_TITLE;
+                states.put(chat_id, DialogueStatus.AWAITING_TITLE);
+
                 SendMessage note = SendMessage
                         .builder()
                         .chatId(chat_id)
+                        .parseMode("HTML")
                         .text("""
-                                Введите заголовок заметки...
+                                <b>🔖 Процесс создания заметки (1/3)</b>
+                                
+                                <i>Укажите название для заметки</i>
                                 """)
                         .build();
+
                 try {
                     telegramClient.execute(note);
                 } catch (TelegramApiException e) {
                     e.printStackTrace();
                 }
+
             } else if (message_text.equals("/notes")) {
                 List<NoteDraft> userNotes = savedDrafts.get(chat_id);
                 if (userNotes != null) {
@@ -178,7 +186,13 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                         SendMessage sendMessage = SendMessage
                                 .builder()
                                 .chatId(chat_id)
-                                .text("%s".formatted(draft.getText()))
+                                .parseMode("HTML")
+                                .text("""
+                                        <b>📚 Ваши заметки</b>
+                                        
+                                        🏷️ <code>%s</code> <b>| %s</b>
+                                        <blockquote>%s</blockquote>
+                                        """.formatted(draft.getTag()))
                                 .build();
                         try {
                             telegramClient.execute(sendMessage);
@@ -186,12 +200,16 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             e.printStackTrace();
                         }
                     }
+
                 } else {
                     SendMessage sendMessage = SendMessage
                             .builder()
                             .chatId(chat_id)
+                            .parseMode("HTML")
                             .text("""
-                                    У вас нет сохраненных заметок
+                                    <b>📭 Список ваших заметок пока пуст</b>
+                                        
+                                    <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
                                     """)
                             .build();
                     try {
@@ -201,6 +219,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                     }
                 }
             }
+
         } else if (update.hasCallbackQuery()) {
             CallbackQuery callbackQuery = update.getCallbackQuery();
             String data = callbackQuery.getData();
@@ -213,8 +232,11 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                     SendMessage note = SendMessage
                             .builder()
                             .chatId(chat_id)
+                            .parseMode("HTML")
                             .text("""
-                                Введите заголовок заметки...
+                                <b>🔖 Процесс создания заметки (1/3)</b>
+                                
+                                <i>Укажите название для заметки</i>
                                 """)
                             .build();
                     try {
@@ -242,10 +264,18 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                         SendMessage sendMessage = SendMessage
                                 .builder()
                                 .chatId(chat_id)
+                                .parseMode("HTML")
                                 .text("""
-                                        У вас нет заметок
+                                        <b>📭 Список ваших заметок пока пуст</b>
+                                        
+                                        <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
                                         """)
                                 .build();
+                        try {
+                            telegramClient.execute(sendMessage);
+                        } catch (TelegramApiException e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
             }
