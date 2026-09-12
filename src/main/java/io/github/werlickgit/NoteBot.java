@@ -47,9 +47,26 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                     .callbackData("notes_list")
                     .build();
 
+            InlineKeyboardButton keyboardButton2 = InlineKeyboardButton.builder()
+                    .text("🔍 Подробнее...")
+                    .callbackData("faq")
+                    .build();
+
+            InlineKeyboardButton keyboardButton3 = InlineKeyboardButton.builder()
+                    .text("❌ Назад")
+                    .callbackData("back")
+                    .build();
+
             InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
                     .keyboard(List.of(
-                            new InlineKeyboardRow(keyboardButton, keyboardButton1)
+                            new InlineKeyboardRow(keyboardButton, keyboardButton1),
+                            new InlineKeyboardRow(keyboardButton2)
+                    ))
+                    .build();
+
+            InlineKeyboardMarkup keyboard2 = InlineKeyboardMarkup.builder()
+                    .keyboard(List.of(
+                            new InlineKeyboardRow(keyboardButton3)
                     ))
                     .build();
 
@@ -67,6 +84,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                 <i>Тег обязательно должен начинаться с символа </i> <code>#</code>
                                 <i>Например:</i> <code>#учёба</code>, <code>#идеи</code>, <code>#важное</code>
                                 """)
+                        .replyMarkup(keyboard2)
                         .build();
                 try {
                     telegramClient.execute(sendMessage);
@@ -87,6 +105,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                 
                                 <i>Введите текст для заметки</i>
                                 """)
+                            .replyMarkup(keyboard2)
                             .build();
                     try {
                         telegramClient.execute(sendMessage);
@@ -101,6 +120,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             .text("""
                                     <i>❗ Вы не указали</i> <code>#</code> <i> в начале, попробуйте указать корректный тэг для вашей заметки</i>
                                     """)
+                            .replyMarkup(keyboard2)
                             .build();
                     try {
                         telegramClient.execute(sendMessage);
@@ -128,6 +148,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                 
                                 <blockquote>%s</blockquote> 
                                 """.formatted(tag, title, text))
+                        .replyMarkup(keyboard)
                         .build();
                 states.put(chat_id, DialogueStatus.NONE);
                 List<NoteDraft> userNotes = savedDrafts.computeIfAbsent(chat_id, k -> new ArrayList<>());
@@ -171,6 +192,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                 
                                 <i>Укажите название для заметки</i>
                                 """)
+                        .replyMarkup(keyboard2)
                         .build();
 
                 try {
@@ -192,7 +214,8 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                         
                                         🏷️ <code>%s</code> <b>| %s</b>
                                         <blockquote>%s</blockquote>
-                                        """.formatted(draft.getTag()))
+                                        """.formatted(draft))
+                                .replyMarkup(keyboard2)
                                 .build();
                         try {
                             telegramClient.execute(sendMessage);
@@ -211,6 +234,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                         
                                     <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
                                     """)
+                            .replyMarkup(keyboard2)
                             .build();
                     try {
                         telegramClient.execute(sendMessage);
@@ -223,7 +247,41 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
         } else if (update.hasCallbackQuery()) {
             CallbackQuery callbackQuery = update.getCallbackQuery();
             String data = callbackQuery.getData();
+            String firstName = callbackQuery.getMessage().getChat().getFirstName();
             long chat_id = callbackQuery.getMessage().getChatId();
+
+            InlineKeyboardButton keyboardButton = InlineKeyboardButton.builder()
+                    .text("🏷️ Создать заметку")
+                    .callbackData("create_note")
+                    .build();
+
+            InlineKeyboardButton keyboardButton1 = InlineKeyboardButton.builder()
+                    .text("📕 Мои заметки")
+                    .callbackData("notes_list")
+                    .build();
+
+            InlineKeyboardButton keyboardButton2 = InlineKeyboardButton.builder()
+                    .text("🔍 Подробнее...")
+                    .callbackData("faq")
+                    .build();
+
+            InlineKeyboardButton keyboardButton3 = InlineKeyboardButton.builder()
+                    .text("❌ Назад")
+                    .callbackData("back")
+                    .build();
+
+            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
+                    .keyboard(List.of(
+                            new InlineKeyboardRow(keyboardButton, keyboardButton1),
+                            new InlineKeyboardRow(keyboardButton2)
+                    ))
+                    .build();
+
+            InlineKeyboardMarkup keyboard2 = InlineKeyboardMarkup.builder()
+                    .keyboard(List.of(
+                            new InlineKeyboardRow(keyboardButton3)
+                    ))
+                    .build();
 
             switch (data) {
                 case "create_note" -> {
@@ -234,10 +292,11 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             .chatId(chat_id)
                             .parseMode("HTML")
                             .text("""
-                                <b>🔖 Процесс создания заметки (1/3)</b>
-                                
-                                <i>Укажите название для заметки</i>
-                                """)
+                                    <b>🔖 Процесс создания заметки (1/3)</b>
+                                    
+                                    <i>Укажите название для заметки</i>
+                                    """)
+                            .replyMarkup(keyboard2)
                             .build();
                     try {
                         telegramClient.execute(note);
@@ -252,7 +311,8 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             SendMessage sendMessage = SendMessage
                                     .builder()
                                     .chatId(chat_id)
-                                    .text("%s".formatted(draft.getText()))
+                                    .text("%s".formatted(draft))
+                                    .replyMarkup(keyboard2)
                                     .build();
                             try {
                                 telegramClient.execute(sendMessage);
@@ -270,12 +330,56 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                         
                                         <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
                                         """)
+                                .replyMarkup(keyboard2)
                                 .build();
                         try {
                             telegramClient.execute(sendMessage);
                         } catch (TelegramApiException e) {
                             e.printStackTrace();
                         }
+                    }
+                }
+                case "back" -> {
+                    SendMessage message = SendMessage
+                            .builder()
+                            .chatId(chat_id)
+                            .parseMode("HTML")
+                            .text("""
+                                    <b>Приветствую, %s!</b>
+                                    
+                                    <i>Я - Meta, твой небольшой помощник для работы с заметками.</i>
+                                    
+                                    <blockquote>📝 Ты можешь отправлять мне свои мысли, задачи, идеи или любую другую информацию, которую хочешь сохранить. Я помогу организовать их с помощью уникальных тегов #, чтобы к заметкам было проще возвращаться и находить нужное.</blockquote>
+                                    
+                                    <i>📚 Все сохранённые заметки можно будет просмотреть в любой момент с помощью специальной команды.</i>
+                                    """.formatted(firstName))
+                            .replyMarkup(keyboard)
+                            .build();
+                    try {
+                        telegramClient.execute(message);
+                    } catch (TelegramApiException e) {
+                        e.printStackTrace();
+                    }
+                }
+                case "faq" -> {
+                    SendMessage message = SendMessage
+                            .builder()
+                            .chatId(chat_id)
+                            .parseMode("HTML")
+                            .text("""
+                                    <b>Подробнее о Meta 💻</b>
+                                    
+                                    <i>Meta-бот для создания, хранения и удобного управления заметками
+                                    Бот был создан в ходе практики Java Core, Stream API и SQL.</i>
+                                    
+                                    <blockquote>Проект имеет открытый исходный код и доступен на GitHub: https://github.com/WerLickGit/MetaBot</blockquote>
+                                    """)
+                            .replyMarkup(keyboard2)
+                            .build();
+                    try {
+                        telegramClient.execute(message);
+                    } catch (TelegramApiException e) {
+                        e.printStackTrace();
                     }
                 }
             }

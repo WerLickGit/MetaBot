@@ -41,10 +41,15 @@ public class NoteDraft {
 
     @Override
     public String toString() {
-        return "NoteDraft{" +
-                "title='" + title + '\'' +
-                ", tag='" + tag + '\'' +
-                ", text='" + text + '\'' +
-                '}';
+        return """
+                <b>📎 Заметка</b>
+                                
+                <i>🏷️ Тег:</i> <code>%s</code>
+                <i>📝 Название: %s</i>
+                                
+                <b>Содержание заметки:</b>
+                                
+                <blockquote>%s</blockquote> 
+                """.formatted(tag, title, text);
     }
 }
