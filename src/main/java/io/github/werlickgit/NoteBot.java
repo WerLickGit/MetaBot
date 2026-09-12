@@ -2,6 +2,7 @@ package io.github.werlickgit;
 
 import org.telegram.telegrambots.client.okhttp.OkHttpTelegramClient;
 import org.telegram.telegrambots.longpolling.util.LongPollingSingleThreadUpdateConsumer;
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.CallbackQuery;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -210,10 +211,7 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                 .chatId(chat_id)
                                 .parseMode("HTML")
                                 .text("""
-                                        <b>📚 Ваши заметки</b>
-                                        
-                                        🏷️ <code>%s</code> <b>| %s</b>
-                                        <blockquote>%s</blockquote>
+                                        %s
                                         """.formatted(draft))
                                 .replyMarkup(keyboard2)
                                 .build();
@@ -249,6 +247,14 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
             String data = callbackQuery.getData();
             String firstName = callbackQuery.getMessage().getChat().getFirstName();
             long chat_id = callbackQuery.getMessage().getChatId();
+
+            try {
+                telegramClient.execute(AnswerCallbackQuery.builder()
+                        .callbackQueryId(callbackQuery.getId())
+                        .build());
+            } catch (TelegramApiException e) {
+                e.printStackTrace();
+            }
 
             InlineKeyboardButton keyboardButton = InlineKeyboardButton.builder()
                     .text("🏷️ Создать заметку")
