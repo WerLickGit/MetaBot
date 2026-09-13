@@ -29,220 +29,246 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
     }
 
 
-    @Override
-    public void consume(Update update) {
-        if (update.hasMessage() && update.getMessage().hasText()) {
-            String message_text = update.getMessage().getText();
-            User user = update.getMessage().getFrom();
-            long chat_id = update.getMessage().getChatId();
-            String firstName = user.getFirstName();
-            DialogueStatus currentStatus = states.get(chat_id);
+    private InlineKeyboardMarkup buildMainMenuKeyboard() {
+        InlineKeyboardButton keyboardButton = InlineKeyboardButton.builder()
+                .text("🏷️ Создать заметку")
+                .callbackData("create_note")
+                .build();
 
-            InlineKeyboardButton keyboardButton = InlineKeyboardButton.builder()
-                    .text("🏷️ Создать заметку")
-                    .callbackData("create_note")
+        InlineKeyboardButton keyboardButton1 = InlineKeyboardButton.builder()
+                .text("📕 Мои заметки")
+                .callbackData("notes_list")
+                .build();
+
+        InlineKeyboardButton keyboardButton2 = InlineKeyboardButton.builder()
+                .text("🔍 Подробнее...")
+                .callbackData("faq")
+                .build();
+
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(
+                        new InlineKeyboardRow(keyboardButton, keyboardButton1),
+                        new InlineKeyboardRow(keyboardButton2)
+                ))
+                .build();
+    }
+
+    private void send(SendMessage sendMessage) {
+        try {
+            telegramClient.execute(sendMessage);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private InlineKeyboardMarkup buildBackKeyboard() {
+        InlineKeyboardButton keyboardButton3 = InlineKeyboardButton.builder()
+                .text("❌ Назад")
+                .callbackData("back")
+                .build();
+
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(
+                        new InlineKeyboardRow(keyboardButton3)
+                ))
+                .build();
+    }
+
+    private InlineKeyboardMarkup buildRemoveNoteKeyboard() {
+        InlineKeyboardButton keyboardButton4 = InlineKeyboardButton.builder()
+                .text("🛑 Удалить заметку")
+                .callbackData("remove_note")
+                .build();
+
+        return InlineKeyboardMarkup.builder()
+                .keyboard(List.of(
+                        new InlineKeyboardRow(keyboardButton4)
+                ))
+                .build();
+    }
+
+    private void handleAwaitingTitle(long chatId, String messageText) {
+        drafts.get(chatId).setTitle(messageText);
+        states.put(chatId, DialogueStatus.AWAITING_TAG);
+        SendMessage sendMessage = SendMessage
+                .builder()
+                .chatId(chatId)
+                .parseMode("HTML")
+                .text("""
+                        <b>🔖 Процесс создания заметки (2/3)</b>
+                        
+                        <i>Тег обязательно должен начинаться с символа </i> <code>#</code>
+                        <i>Например:</i> <code>#учёба</code>, <code>#идеи</code>, <code>#важное</code>
+                        """)
+                .replyMarkup(buildMainMenuKeyboard())
+                .build();
+        send(sendMessage);
+    }
+
+    private void handleAwaitingTag(long chatId, String messageText) {
+        if (messageText.startsWith("#")) {
+            drafts.get(chatId).setTag(messageText);
+            states.put(chatId, DialogueStatus.AWAITING_TEXT);
+            SendMessage sendMessage = SendMessage
+                    .builder()
+                    .chatId(chatId)
+                    .parseMode("HTML")
+                    .text("""
+                            <b>🔖 Процесс создания заметки (3/3)</b>
+                            
+                            <i>Введите текст для заметки</i>
+                            """)
+                    .replyMarkup(buildBackKeyboard())
                     .build();
-
-            InlineKeyboardButton keyboardButton1 = InlineKeyboardButton.builder()
-                    .text("📕 Мои заметки")
-                    .callbackData("notes_list")
+            send(sendMessage);
+        } else {
+            SendMessage sendMessage = SendMessage
+                    .builder()
+                    .chatId(chatId)
+                    .parseMode("HTML")
+                    .text("""
+                            <i>❗ Вы не указали</i> <code>#</code> <i> в начале, попробуйте указать корректный тэг для вашей заметки</i>
+                            """)
+                    .replyMarkup(buildBackKeyboard())
                     .build();
+            send(sendMessage);
+        }
+    }
 
-            InlineKeyboardButton keyboardButton2 = InlineKeyboardButton.builder()
-                    .text("🔍 Подробнее...")
-                    .callbackData("faq")
-                    .build();
+    private void handleAwaitingText(long chatId, String messageText) {
+        drafts.get(chatId).setText(messageText);
+        String title = drafts.get(chatId).getTitle();
+        String tag = drafts.get(chatId).getTag();
+        String text = drafts.get(chatId).getText();
+        SendMessage sendMessage = SendMessage
+                .builder()
+                .chatId(chatId)
+                .parseMode("HTML")
+                .text("""
+                        <b>✅ Заметка успешно создана</b>
+                        
+                        <i>🏷️ Тег:</i> <code>%s</code>
+                        <i>📝 Название: %s</i>
+                        
+                        <b>Содержание заметки:</b>
+                        
+                        <blockquote>%s</blockquote> 
+                        """.formatted(tag, title, text))
+                .replyMarkup(buildMainMenuKeyboard())
+                .build();
+        states.put(chatId, DialogueStatus.NONE);
+        List<NoteDraft> userNotes = savedDrafts.computeIfAbsent(chatId, k -> new ArrayList<>());
+        userNotes.add(drafts.get(chatId));
+        send(sendMessage);
+    }
 
-            InlineKeyboardButton keyboardButton3 = InlineKeyboardButton.builder()
-                    .text("❌ Назад")
-                    .callbackData("back")
-                    .build();
+    private void handleStartCommand(long chatId, String firstName) {
+        SendMessage message = SendMessage
+                .builder()
+                .chatId(chatId)
+                .parseMode("HTML")
+                .text("""
+                        <b>Приветствую, %s!</b>
+                        
+                        <i>Я - Meta, твой небольшой помощник для работы с заметками.</i>
+                        
+                        <blockquote>📝 Ты можешь отправлять мне свои мысли, задачи, идеи или любую другую информацию, которую хочешь сохранить. Я помогу организовать их с помощью уникальных тегов #, чтобы к заметкам было проще возвращаться и находить нужное.</blockquote>
+                        
+                        <i>📚 Все сохранённые заметки можно будет просмотреть в любой момент с помощью специальной команды.</i>
+                        """.formatted(firstName))
+                .replyMarkup(buildMainMenuKeyboard())
+                .build();
+        send(message);
+    }
 
-            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
-                    .keyboard(List.of(
-                            new InlineKeyboardRow(keyboardButton, keyboardButton1),
-                            new InlineKeyboardRow(keyboardButton2)
-                    ))
-                    .build();
+    private void handleNoteCommand(long chatId) {
+        drafts.put(chatId, new NoteDraft());
+        states.put(chatId, DialogueStatus.AWAITING_TITLE);
 
-            InlineKeyboardMarkup keyboard2 = InlineKeyboardMarkup.builder()
-                    .keyboard(List.of(
-                            new InlineKeyboardRow(keyboardButton3)
-                    ))
-                    .build();
+        SendMessage note = SendMessage
+                .builder()
+                .chatId(chatId)
+                .parseMode("HTML")
+                .text("""
+                        <b>🔖 Процесс создания заметки (1/3)</b>
+                        
+                        <i>Укажите название для заметки</i>
+                        """)
+                .replyMarkup(buildBackKeyboard())
+                .build();
+        send(note);
+    }
 
-            if (currentStatus == DialogueStatus.AWAITING_TITLE) {
-                drafts.get(chat_id).setTitle(message_text);
-                states.put(chat_id, DialogueStatus.AWAITING_TAG);
-                currentStatus = DialogueStatus.AWAITING_TAG;
+    private void handleNotesCommand(long chatId) {
+        List<NoteDraft> userNotes = savedDrafts.get(chatId);
+        if (userNotes != null) {
+            for (NoteDraft draft : userNotes) {
                 SendMessage sendMessage = SendMessage
                         .builder()
-                        .chatId(chat_id)
+                        .chatId(chatId)
                         .parseMode("HTML")
                         .text("""
-                                <b>🔖 Процесс создания заметки (2/3)</b>
-                                
-                                <i>Тег обязательно должен начинаться с символа </i> <code>#</code>
-                                <i>Например:</i> <code>#учёба</code>, <code>#идеи</code>, <code>#важное</code>
-                                """)
-                        .replyMarkup(keyboard2)
+                                %s
+                                """.formatted(draft))
+                        .replyMarkup(buildRemoveNoteKeyboard())
                         .build();
-                try {
-                    telegramClient.execute(sendMessage);
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                }
-            } else if (currentStatus == DialogueStatus.AWAITING_TAG) {
-                if (message_text.startsWith("#")) {
-                    drafts.get(chat_id).setTag(message_text);
-                    states.put(chat_id, DialogueStatus.AWAITING_TEXT);
-                    currentStatus = DialogueStatus.NONE;
-                    SendMessage sendMessage = SendMessage
-                            .builder()
-                            .chatId(chat_id)
-                            .parseMode("HTML")
-                            .text("""
-                                <b>🔖 Процесс создания заметки (3/3)</b>
-                                
-                                <i>Введите текст для заметки</i>
-                                """)
-                            .replyMarkup(keyboard2)
-                            .build();
-                    try {
-                        telegramClient.execute(sendMessage);
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                    }
-                } else {
-                    SendMessage sendMessage = SendMessage
-                            .builder()
-                            .chatId(chat_id)
-                            .parseMode("HTML")
-                            .text("""
-                                    <i>❗ Вы не указали</i> <code>#</code> <i> в начале, попробуйте указать корректный тэг для вашей заметки</i>
-                                    """)
-                            .replyMarkup(keyboard2)
-                            .build();
-                    try {
-                        telegramClient.execute(sendMessage);
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                    }
-                }
+                send(sendMessage);
             }
-            else if (currentStatus == DialogueStatus.AWAITING_TEXT) {
-                drafts.get(chat_id).setText(message_text);
-                String title = drafts.get(chat_id).getTitle();
-                String tag = drafts.get(chat_id).getTag();
-                String text = drafts.get(chat_id).getText();
-                SendMessage sendMessage = SendMessage
-                        .builder()
-                        .chatId(chat_id)
-                        .parseMode("HTML")
-                        .text("""
-                                <b>✅ Заметка успешно создана</b>
-                                
-                                <i>🏷️ Тег:</i> <code>%s</code>
-                                <i>📝 Название: %s</i>
-                                
-                                <b>Содержание заметки:</b>
-                                
-                                <blockquote>%s</blockquote> 
-                                """.formatted(tag, title, text))
-                        .replyMarkup(keyboard)
-                        .build();
-                states.put(chat_id, DialogueStatus.NONE);
-                List<NoteDraft> userNotes = savedDrafts.computeIfAbsent(chat_id, k -> new ArrayList<>());
-                userNotes.add(drafts.get(chat_id));
-                try {
-                    telegramClient.execute(sendMessage);
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                }
-            } else if (message_text.equals("/start")) {
-                SendMessage message = SendMessage
-                        .builder()
-                        .chatId(chat_id)
-                        .parseMode("HTML")
-                        .text("""
-                                <b>Приветствую, %s!</b>
-                                
-                                <i>Я - Meta, твой небольшой помощник для работы с заметками.</i>
-                                
-                                <blockquote>📝 Ты можешь отправлять мне свои мысли, задачи, идеи или любую другую информацию, которую хочешь сохранить. Я помогу организовать их с помощью уникальных тегов #, чтобы к заметкам было проще возвращаться и находить нужное.</blockquote>
-                                
-                                <i>📚 Все сохранённые заметки можно будет просмотреть в любой момент с помощью специальной команды.</i>
-                                """.formatted(firstName))
-                        .replyMarkup(keyboard)
-                        .build();
-                try {
-                    telegramClient.execute(message);
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                }
-            } else if (message_text.equals("/note")) {
-                drafts.put(chat_id, new NoteDraft());
-                states.put(chat_id, DialogueStatus.AWAITING_TITLE);
+        } else {
+            SendMessage sendMessage = SendMessage
+                    .builder()
+                    .chatId(chatId)
+                    .parseMode("HTML")
+                    .text("""
+                            <b>📭 Список ваших заметок пока пуст</b>
+                            
+                            <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
+                            """)
+                    .replyMarkup(buildBackKeyboard())
+                    .build();
+            send(sendMessage);
+        }
+    }
 
-                SendMessage note = SendMessage
-                        .builder()
-                        .chatId(chat_id)
-                        .parseMode("HTML")
-                        .text("""
-                                <b>🔖 Процесс создания заметки (1/3)</b>
-                                
-                                <i>Укажите название для заметки</i>
-                                """)
-                        .replyMarkup(keyboard2)
-                        .build();
+    private void handleRemoveCommand(long chatId) {
+        states.put(chatId, DialogueStatus.AWAITING_REMOVENOTE);
+        SendMessage sendMessage = SendMessage
+                .builder()
+                .chatId(chatId)
+                .text("""
+                        Введите название заметки, которую хотите удалить
+                        """)
+                .build();
+        send(sendMessage);
+    }
 
-                try {
-                    telegramClient.execute(note);
-                } catch (TelegramApiException e) {
-                    e.printStackTrace();
-                }
+    private void handleAwaitingRemoveNote(long chatId, String messageText) {
+        List<NoteDraft> userNotes = savedDrafts.get(chatId);
+        boolean removed = userNotes.removeIf(note -> !note.equals(null) && note.getTitle().equals(messageText));
+        if (removed) {
+            SendMessage sendMessage = SendMessage
+                    .builder()
+                    .chatId(chatId)
+                    .text("""
+                            Заметка %s успешно удалена
+                            """.formatted(messageText))
+                    .build();
+            states.put(chatId, DialogueStatus.NONE);
+            send(sendMessage);
+        } else {
+            SendMessage sendMessage = SendMessage
+                    .builder()
+                    .chatId(chatId)
+                    .text("""
+                            Заметки с таким названием не существует
+                            """)
+                    .build();
+            send(sendMessage);
+        }
+    }
 
-            } else if (message_text.equals("/notes")) {
-                List<NoteDraft> userNotes = savedDrafts.get(chat_id);
-                if (userNotes != null) {
-                    for (NoteDraft draft : userNotes) {
-                        SendMessage sendMessage = SendMessage
-                                .builder()
-                                .chatId(chat_id)
-                                .parseMode("HTML")
-                                .text("""
-                                        %s
-                                        """.formatted(draft))
-                                .replyMarkup(keyboard2)
-                                .build();
-                        try {
-                            telegramClient.execute(sendMessage);
-                        } catch (TelegramApiException e) {
-                            e.printStackTrace();
-                        }
-                    }
-
-                } else {
-                    SendMessage sendMessage = SendMessage
-                            .builder()
-                            .chatId(chat_id)
-                            .parseMode("HTML")
-                            .text("""
-                                    <b>📭 Список ваших заметок пока пуст</b>
-                                        
-                                    <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
-                                    """)
-                            .replyMarkup(keyboard2)
-                            .build();
-                    try {
-                        telegramClient.execute(sendMessage);
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-
-        } else if (update.hasCallbackQuery()) {
+    private void handleCallbackQuery(Update update) {
+        if (update.hasCallbackQuery()) {
             CallbackQuery callbackQuery = update.getCallbackQuery();
             String data = callbackQuery.getData();
             String firstName = callbackQuery.getMessage().getChat().getFirstName();
@@ -255,39 +281,6 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
             }
-
-            InlineKeyboardButton keyboardButton = InlineKeyboardButton.builder()
-                    .text("🏷️ Создать заметку")
-                    .callbackData("create_note")
-                    .build();
-
-            InlineKeyboardButton keyboardButton1 = InlineKeyboardButton.builder()
-                    .text("📕 Мои заметки")
-                    .callbackData("notes_list")
-                    .build();
-
-            InlineKeyboardButton keyboardButton2 = InlineKeyboardButton.builder()
-                    .text("🔍 Подробнее...")
-                    .callbackData("faq")
-                    .build();
-
-            InlineKeyboardButton keyboardButton3 = InlineKeyboardButton.builder()
-                    .text("❌ Назад")
-                    .callbackData("back")
-                    .build();
-
-            InlineKeyboardMarkup keyboard = InlineKeyboardMarkup.builder()
-                    .keyboard(List.of(
-                            new InlineKeyboardRow(keyboardButton, keyboardButton1),
-                            new InlineKeyboardRow(keyboardButton2)
-                    ))
-                    .build();
-
-            InlineKeyboardMarkup keyboard2 = InlineKeyboardMarkup.builder()
-                    .keyboard(List.of(
-                            new InlineKeyboardRow(keyboardButton3)
-                    ))
-                    .build();
 
             switch (data) {
                 case "create_note" -> {
@@ -302,13 +295,9 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                     
                                     <i>Укажите название для заметки</i>
                                     """)
-                            .replyMarkup(keyboard2)
+                            .replyMarkup(buildBackKeyboard())
                             .build();
-                    try {
-                        telegramClient.execute(note);
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                    }
+                    send(note);
                 }
                 case "notes_list" -> {
                     List<NoteDraft> userNotes = savedDrafts.get(chat_id);
@@ -317,14 +306,11 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             SendMessage sendMessage = SendMessage
                                     .builder()
                                     .chatId(chat_id)
+                                    .parseMode("HTML")
                                     .text("%s".formatted(draft))
-                                    .replyMarkup(keyboard2)
+                                    .replyMarkup(buildRemoveNoteKeyboard())
                                     .build();
-                            try {
-                                telegramClient.execute(sendMessage);
-                            } catch (TelegramApiException e) {
-                                e.printStackTrace();
-                            }
+                            send(sendMessage);
                         }
                     } else {
                         SendMessage sendMessage = SendMessage
@@ -336,13 +322,9 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                         
                                         <i>У вас ещё нет сохранённых заметок. Создайте первую и она появится здесь.</i>
                                         """)
-                                .replyMarkup(keyboard2)
+                                .replyMarkup(buildRemoveNoteKeyboard())
                                 .build();
-                        try {
-                            telegramClient.execute(sendMessage);
-                        } catch (TelegramApiException e) {
-                            e.printStackTrace();
-                        }
+                        send(sendMessage);
                     }
                 }
                 case "back" -> {
@@ -359,13 +341,9 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                     
                                     <i>📚 Все сохранённые заметки можно будет просмотреть в любой момент с помощью специальной команды.</i>
                                     """.formatted(firstName))
-                            .replyMarkup(keyboard)
+                            .replyMarkup(buildMainMenuKeyboard())
                             .build();
-                    try {
-                        telegramClient.execute(message);
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                    }
+                    send(message);
                 }
                 case "faq" -> {
                     SendMessage message = SendMessage
@@ -380,15 +358,42 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                                     
                                     <blockquote>Проект имеет открытый исходный код и доступен на GitHub: https://github.com/WerLickGit/MetaBot</blockquote>
                                     """)
-                            .replyMarkup(keyboard2)
+                            .replyMarkup(buildBackKeyboard())
                             .build();
-                    try {
-                        telegramClient.execute(message);
-                    } catch (TelegramApiException e) {
-                        e.printStackTrace();
-                    }
+                    send(message);
                 }
             }
+        }
+    }
+
+    @Override
+    public void consume(Update update) {
+        if (update.hasMessage() && update.getMessage().hasText()) {
+            String message_text = update.getMessage().getText();
+            User user = update.getMessage().getFrom();
+            long chat_id = update.getMessage().getChatId();
+            String firstName = user.getFirstName();
+            DialogueStatus currentStatus = states.get(chat_id);
+
+            if (currentStatus == DialogueStatus.AWAITING_TITLE) {
+                handleAwaitingTitle(chat_id, message_text);
+            } else if (currentStatus == DialogueStatus.AWAITING_TAG) {
+                handleAwaitingTag(chat_id, message_text);
+            } else if (currentStatus == DialogueStatus.AWAITING_TEXT) {
+                handleAwaitingText(chat_id, message_text);
+            } else if (currentStatus == DialogueStatus.AWAITING_REMOVENOTE) {
+                handleAwaitingRemoveNote(chat_id, message_text);
+            } else if (message_text.equals("/start")) {
+                handleStartCommand(chat_id, user.getFirstName());
+            } else if (message_text.equals("/note")) {
+                handleNoteCommand(chat_id);
+            } else if (message_text.equals("/notes")) {
+                handleNotesCommand(chat_id);
+            } else if (message_text.equals("/remove")) {
+                handleRemoveCommand(chat_id);
+            }
+        } else if (update.hasCallbackQuery()) {
+            handleCallbackQuery(update);
         }
     }
 }

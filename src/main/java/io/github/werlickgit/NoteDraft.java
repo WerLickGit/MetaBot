@@ -1,5 +1,7 @@
 package io.github.werlickgit;
 
+import java.util.Objects;
+
 public class NoteDraft {
     private String title;
     private String tag;
@@ -51,5 +53,17 @@ public class NoteDraft {
                                 
                 <blockquote>%s</blockquote> 
                 """.formatted(tag, title, text);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        NoteDraft noteDraft = (NoteDraft) o;
+        return Objects.equals(title, noteDraft.title) && Objects.equals(tag, noteDraft.tag) && Objects.equals(text, noteDraft.text);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(title, tag, text);
     }
 }
