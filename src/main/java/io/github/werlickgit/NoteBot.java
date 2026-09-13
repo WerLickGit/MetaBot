@@ -80,9 +80,14 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                 .callbackData("remove_note")
                 .build();
 
+        InlineKeyboardButton keyboardButton3 = InlineKeyboardButton.builder()
+                .text("❌ Назад")
+                .callbackData("back")
+                .build();
+
         return InlineKeyboardMarkup.builder()
                 .keyboard(List.of(
-                        new InlineKeyboardRow(keyboardButton4)
+                        new InlineKeyboardRow(keyboardButton4, keyboardButton3)
                 ))
                 .build();
     }
@@ -236,22 +241,24 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                 .builder()
                 .chatId(chatId)
                 .text("""
-                        Введите название заметки, которую хотите удалить
+                        <i>🗑 Введите название заметки, которую хотите удалить</i>
                         """)
+                .replyMarkup(buildBackKeyboard())
                 .build();
         send(sendMessage);
     }
 
     private void handleAwaitingRemoveNote(long chatId, String messageText) {
         List<NoteDraft> userNotes = savedDrafts.get(chatId);
-        boolean removed = userNotes.removeIf(note -> !note.equals(null) && note.getTitle().equals(messageText));
+        boolean removed = userNotes != null && userNotes.removeIf(note -> !note.equals(null) && note.getTitle().equals(messageText));
         if (removed) {
             SendMessage sendMessage = SendMessage
                     .builder()
                     .chatId(chatId)
                     .text("""
-                            Заметка %s успешно удалена
+                            <i>🗑 Заметка %s успешно удалена</i>
                             """.formatted(messageText))
+                    .replyMarkup(buildBackKeyboard())
                     .build();
             states.put(chatId, DialogueStatus.NONE);
             send(sendMessage);
@@ -260,8 +267,11 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                     .builder()
                     .chatId(chatId)
                     .text("""
-                            Заметки с таким названием не существует
+                            <b>❌ Заметки с таким названием не существует</b>
+                            
+                            <i>Проверьте название и попробуйте ещё раз</i>
                             """)
+                    .replyMarkup(buildBackKeyboard())
                     .build();
             send(sendMessage);
         }
@@ -361,6 +371,18 @@ public class NoteBot implements LongPollingSingleThreadUpdateConsumer {
                             .replyMarkup(buildBackKeyboard())
                             .build();
                     send(message);
+                }
+                case "remove_note" -> {
+                    states.put(chat_id, DialogueStatus.AWAITING_REMOVENOTE);
+                    SendMessage sendMessage = SendMessage
+                            .builder()
+                            .chatId(chat_id)
+                            .text("""
+                        <i>🗑 Введите название заметки, которую хотите удалить</i>
+                        """)
+                            .replyMarkup(buildBackKeyboard())
+                            .build();
+                    send(sendMessage);
                 }
             }
         }
